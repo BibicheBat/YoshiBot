@@ -1,38 +1,20 @@
-// commands/music/queue.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { useQueue } = require('discord-player');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('queue')
-    .setDescription('🎶 Voir la file d\'attente musicale'),
-
+  data: new SlashCommandBuilder().setName('queue').setDescription('🎶 Voir la file d\'attente'),
   async execute(interaction, client) {
-    const queue = client.musicQueues.get(interaction.guild.id);
-
-    if (!queue || queue.tracks.length === 0) {
-      return interaction.reply({ content: '❌ Aucune musique en file d\'attente.', ephemeral: true });
-    }
-
-    const current = queue.tracks[0];
-    const upcoming = queue.tracks.slice(1, 11);
-
+    const queue = useQueue(interaction.guild.id);
+    if (!queue || !queue.isPlaying()) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
+    const current = queue.currentTrack;
+    const tracks = queue.tracks.toArray().slice(0, 10);
     const embed = new EmbedBuilder()
-      .setTitle('🎵 File d\'attente')
-      .setColor(0x4CAF50)
-      .addFields({
-        name: queue.paused ? '⏸️ En pause' : '▶️ En cours',
-        value: `**[${current.title}](${current.url})**\nDemandé par : ${current.requestedBy}`,
-      });
-
-    if (upcoming.length > 0) {
-      embed.addFields({
-        name: `📋 À venir (${queue.tracks.length - 1} musique${queue.tracks.length - 1 > 1 ? 's' : ''})`,
-        value: upcoming.map((t, i) => `**${i + 1}.** [${t.title}](${t.url})`).join('\n'),
-      });
+      .setTitle('🎵 File d\'attente').setColor(0x4CAF50)
+      .addFields({ name: '▶️ En cours', value: `**[${current.title}](${current.url})**` });
+    if (tracks.length > 0) {
+      embed.addFields({ name: `📋 À venir (${queue.tracks.size})`, value: tracks.map((t, i) => `**${i+1}.** ${t.title}`).join('\n') });
     }
-
-    embed.setFooter({ text: `${queue.tracks.length} musique(s) au total • Yoshi Music 🦕` });
-
+    embed.setFooter({ text: 'Yoshi Music 🎵' });
     await interaction.reply({ embeds: [embed] });
   },
 };

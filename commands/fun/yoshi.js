@@ -16,6 +16,7 @@ const YOSHI_GIFS = [
   'https://tenor.com/view/yoshi-mario-mario-party-superstars-dance-gif-23646599',
 ];
 
+
 // Phrases avec les emojis Yoshi custom (résolu au moment de l'exécution)
 function getYoshiPhrases() {
   return [

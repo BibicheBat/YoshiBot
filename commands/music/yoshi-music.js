@@ -1,15 +1,15 @@
-// commands/music/yoshi-music.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getOrCreateQueue } = require('../../utils/musicManager');
+const { getPlayer } = require('../../utils/musicManager');
 
 // ════════════════════════════════════════════════
 //  🎵 PLAYLIST YOSHI — AJOUTE TES MUSIQUES ICI !
 // ════════════════════════════════════════════════
 const YOSHI_PLAYLIST = [
-  { title: "Yoshi's Island Theme",       url: 'https://www.youtube.com/watch?v=mVSmY5TQVOI', emoji: '🏝️' },
-  { title: "Yoshi's Story — Happy Together", url: 'https://www.youtube.com/watch?v=8v8FKqPNQvo', emoji: '📖' },
-  { title: "Yoshi's Woolly World Theme", url: 'https://www.youtube.com/watch?v=LyOH8pQEeLo', emoji: '🧶' },
-  { title: "Yoshi's Crafted World",      url: 'https://www.youtube.com/watch?v=ZKlFNYiOPGk', emoji: '🎨' },
+  { title: "Yoshi's Story - Theme",       url: 'https://www.youtube.com/watch?v=nghTrcPBp3s', emoji: '🏝️' },
+  { title: "Yoshi's Island", url: 'https://www.youtube.com/watch?v=oKJ2EZnnZRE', emoji: '📖' },
+  { title: "Yoshi's Happy Song", url: 'https://www.youtube.com/watch?v=fNmb_hlMfGE', emoji: '🧶' },
+  { title: "Yoshi's Story - Ending Story",      url: 'https://www.youtube.com/watch?v=PaSg-4nZTbk', emoji: '🎨' },
+  { title: "Yoshi's Island 2",      url: 'https://www.youtube.com/watch?v=Czs-rHs2Aqo', emoji: '🎨' },
   // Ajoute tes musiques ici :
   // { title: 'Nom', url: 'https://youtube.com/watch?v=...', emoji: '🎵' },
 ];
@@ -18,52 +18,28 @@ const YOSHI_PLAYLIST = [
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('yoshi-music')
-    .setDescription('🦕 Lancer une musique Yoshi depuis la playlist officielle !')
+    .setDescription('🦕 Lancer une musique Yoshi depuis la playlist !')
     .addStringOption(opt => {
       opt.setName('musique').setDescription('Choisir une musique').setRequired(false);
-      YOSHI_PLAYLIST.forEach((track, i) => {
-        opt.addChoices({ name: `${track.emoji} ${track.title}`, value: `${i}` });
-      });
+      YOSHI_PLAYLIST.forEach((t, i) => opt.addChoices({ name: `${t.emoji} ${t.title}`, value: `${i}` }));
       return opt;
     }),
 
   async execute(interaction, client) {
-    if (!interaction.member.voice.channel) {
-      return interaction.reply({ content: '❌ Tu dois être dans un salon vocal !', ephemeral: true });
-    }
-
+    if (!interaction.member.voice.channel) return interaction.reply({ content: '❌ Tu dois être dans un salon vocal !', ephemeral: true });
     const choice = interaction.options.getString('musique');
-    const track = choice !== null
-      ? YOSHI_PLAYLIST[parseInt(choice)]
-      : YOSHI_PLAYLIST[Math.floor(Math.random() * YOSHI_PLAYLIST.length)];
-
+    const track = choice !== null ? YOSHI_PLAYLIST[parseInt(choice)] : YOSHI_PLAYLIST[Math.floor(Math.random() * YOSHI_PLAYLIST.length)];
     if (!track) return interaction.reply({ content: '❌ Musique introuvable.', ephemeral: true });
 
     await interaction.deferReply();
-
-    const queue = await getOrCreateQueue(interaction, client);
-    if (!queue) return interaction.editReply('❌ Impossible de rejoindre le salon vocal !');
-
-    const trackInfo = {
-      title: track.title,
-      url: track.url,
-      duration: '??:??',
-      thumbnail: null,
-      requestedBy: interaction.user.tag,
-    };
-
-    await queue.addTrack(trackInfo);
-
-    const embed = new EmbedBuilder()
-      .setTitle('🦕 Yoshi Music')
-      .setColor(0x4CAF50)
-      .setDescription(`${track.emoji} **${track.title}**\n\nYoshi danse pour toi ! 💃`)
-      .addFields(
-        { name: '👤 Demandé par', value: interaction.user.tag,      inline: true },
-        { name: '🎶 Position',    value: `#${queue.tracks.length}`, inline: true },
-      )
-      .setFooter({ text: `Playlist Yoshi • ${YOSHI_PLAYLIST.length} musiques` });
-
-    await interaction.editReply({ embeds: [embed] });
+    try {
+      const player = await getPlayer(client);
+      await player.play(interaction.member.voice.channel, track.url, {
+        nodeOptions: { metadata: { channel: interaction.channel }, selfDeaf: true, volume: 80, leaveOnEnd: true, leaveOnEndCooldown: 30000 },
+      });
+      await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('🦕 Yoshi Music').setColor(0x4CAF50).setDescription(`${track.emoji} **${track.title}**\n\nYoshi danse pour toi ! 💃`).setFooter({ text: `Playlist Yoshi • ${YOSHI_PLAYLIST.length} musiques` })] });
+    } catch (err) {
+      await interaction.editReply(`❌ Erreur : \`${err.message}\``);
+    }
   },
 };

@@ -15,7 +15,6 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.musicQueues = new Map();
 
 // Load all commands
 const commandFolders = fs.readdirSync(path.join(__dirname, 'commands'));
@@ -32,14 +31,34 @@ for (const folder of commandFolders) {
   }
 }
 
-// Register slash commands
 client.once('ready', async () => {
   console.log(`✅ Bot Yoshi connecté en tant que ${client.user.tag}`);
 
+  // Init discord-player
+  try {
+    const { getPlayer } = require('./utils/musicManager');
+    const player = await getPlayer(client);
+
+    player.events.on('error', (queue, err) => console.error('[Player] Erreur:', err.message));
+    player.events.on('playerError', (queue, err) => {
+      console.error('[Player] Erreur lecture:', err.message);
+      queue.metadata?.channel?.send(`❌ Erreur de lecture : \`${err.message}\``);
+    });
+    player.events.on('playerStart', (queue, track) => {
+      queue.metadata?.channel?.send(`▶️ Lecture de **${track.title}** !`);
+    });
+    player.events.on('emptyQueue', (queue) => {
+      queue.metadata?.channel?.send('🎵 File d\'attente terminée ! Yoshi part se reposer... 💤');
+    });
+  } catch (e) {
+    console.error('[Music] Erreur init discord-player:', e.message);
+  }
+
+  // Register slash commands
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: allCommands });
-    console.log('✅ Slash commands enregistrées globalement.');
+    console.log('✅ Slash commands enregistrées.');
   } catch (err) {
     console.error('Erreur enregistrement commandes:', err);
   }
@@ -48,12 +67,12 @@ client.once('ready', async () => {
   const { distributeEggs } = require('./utils/yoshiGame');
   setInterval(() => distributeEggs(client), 60 * 60 * 1000);
 
-  client.user.setActivity('🥚 Adopte un Yoshi ! | /yoshi', { type: 2 });
+  client.user.setActivity('🥚 Adopte un Yoshi ! | /adopter', { type: 2 });
 });
 
 // Handle interactions
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
 
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
@@ -63,15 +82,11 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
       console.error(`Erreur commande ${interaction.commandName}:`, error);
       const msg = { content: '❌ Une erreur est survenue.', ephemeral: true };
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(msg);
-      } else {
-        await interaction.reply(msg);
-      }
+      if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
+      else await interaction.reply(msg);
     }
   }
 
-  // Button handler (giveaway, yoshi-game)
   if (interaction.isButton()) {
     const { handleButton } = require('./utils/buttonHandler');
     await handleButton(interaction, client);
