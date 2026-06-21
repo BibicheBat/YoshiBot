@@ -8,18 +8,31 @@ async function getPlayer(client) {
 
   player = new Player(client);
 
+  // Debug : voir ce qu'exporte @discord-player/extractor
   try {
-    const { YoutubeiExtractor } = require('@discord-player/extractor');
-    await player.extractors.register(YoutubeiExtractor, {});
-    console.log('[Music] YoutubeiExtractor OK');
-  } catch(e1) {
-    console.error('[Music] YoutubeiExtractor échoué:', e1.message);
-    try {
-      await player.extractors.loadDefault();
-      console.log('[Music] Extractors par défaut chargés');
-    } catch(e2) {
-      console.error('[Music] Impossible de charger les extractors:', e2.message);
+    const extractor = require('@discord-player/extractor');
+    console.log('[Music] Exports disponibles:', Object.keys(extractor));
+
+    // Essaie tous les extractors possibles
+    const toTry = [
+      'YoutubeiExtractor',
+      'YouTubeExtractor', 
+      'SoundCloudExtractor',
+      'SpotifyExtractor',
+    ];
+
+    for (const name of toTry) {
+      if (extractor[name]) {
+        try {
+          await player.extractors.register(extractor[name], {});
+          console.log(`[Music] ${name} chargé !`);
+        } catch(e) {
+          console.error(`[Music] ${name} erreur:`, e.message);
+        }
+      }
     }
+  } catch(e) {
+    console.error('[Music] Erreur import extractor:', e.message);
   }
 
   console.log('[Music] Extractors actifs:', [...player.extractors.store.keys()]);
