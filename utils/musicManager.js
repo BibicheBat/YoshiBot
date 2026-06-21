@@ -7,8 +7,10 @@ let player;
 async function getPlayer(client) {
   if (player) return player;
   player = new Player(client);
-  await player.extractors.register(YoutubeiExtractor, {});
-  console.log('[Music] discord-player initialisé');
+  await player.extractors.register(YoutubeiExtractor, {
+    streamOptions: { useClient: 'ANDROID' }
+  });
+  console.log('[Music] discord-player prêt');
   return player;
 }
 

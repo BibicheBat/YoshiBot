@@ -1,4 +1,4 @@
-// data/db.js - MongoDB Atlas pour la persistance des données
+// data/db.js
 const { MongoClient } = require('mongodb');
 
 const uri = process.env.MONGODB_URI;
@@ -7,6 +7,7 @@ let db;
 
 async function connect() {
   if (db) return db;
+  if (!uri) throw new Error('MONGODB_URI non défini dans les variables Railway !');
   client = new MongoClient(uri);
   await client.connect();
   db = client.db('yoshibot');
@@ -14,7 +15,6 @@ async function connect() {
   return db;
 }
 
-// ── Yoshis ──────────────────────────────────────────────────────────────
 async function getYoshi(userId) {
   const database = await connect();
   return await database.collection('yoshis').findOne({ userId });
@@ -22,11 +22,7 @@ async function getYoshi(userId) {
 
 async function setYoshi(userId, yoshiData) {
   const database = await connect();
-  await database.collection('yoshis').updateOne(
-    { userId },
-    { $set: { ...yoshiData, userId } },
-    { upsert: true }
-  );
+  await database.collection('yoshis').updateOne({ userId }, { $set: { ...yoshiData, userId } }, { upsert: true });
 }
 
 async function getAllYoshis() {
@@ -37,7 +33,6 @@ async function getAllYoshis() {
   return result;
 }
 
-// ── Giveaways ───────────────────────────────────────────────────────────
 async function getGiveaways() {
   const database = await connect();
   return await database.collection('giveaways').find({}).toArray();
@@ -46,12 +41,9 @@ async function getGiveaways() {
 async function saveGiveaways(giveaways) {
   const database = await connect();
   await database.collection('giveaways').deleteMany({});
-  if (giveaways.length > 0) {
-    await database.collection('giveaways').insertMany(giveaways);
-  }
+  if (giveaways.length > 0) await database.collection('giveaways').insertMany(giveaways);
 }
 
-// ── Couples ─────────────────────────────────────────────────────────────
 async function getCouples() {
   const database = await connect();
   const docs = await database.collection('couples').find({}).toArray();
@@ -67,7 +59,6 @@ async function saveCouples(couples) {
   if (docs.length > 0) await database.collection('couples').insertMany(docs);
 }
 
-// ── Warns ───────────────────────────────────────────────────────────────
 async function getWarns(userId) {
   const database = await connect();
   const doc = await database.collection('warns').findOne({ userId });
@@ -76,25 +67,7 @@ async function getWarns(userId) {
 
 async function saveWarns(userId, warns) {
   const database = await connect();
-  await database.collection('warns').updateOne(
-    { userId },
-    { $set: { userId, warns } },
-    { upsert: true }
-  );
+  await database.collection('warns').updateOne({ userId }, { $set: { userId, warns } }, { upsert: true });
 }
 
-async function getAllWarns() {
-  const database = await connect();
-  const docs = await database.collection('warns').find({}).toArray();
-  const result = {};
-  docs.forEach(d => { result[d.userId] = d.warns; });
-  return result;
-}
-
-module.exports = {
-  connect,
-  getYoshi, setYoshi, getAllYoshis,
-  getGiveaways, saveGiveaways,
-  getCouples, saveCouples,
-  getWarns, saveWarns, getAllWarns,
-};
+module.exports = { connect, getYoshi, setYoshi, getAllYoshis, getGiveaways, saveGiveaways, getCouples, saveCouples, getWarns, saveWarns };
