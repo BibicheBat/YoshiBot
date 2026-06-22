@@ -1,12 +1,12 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getKazagumo } = require('../../utils/musicManager');
-
 module.exports = {
   data: new SlashCommandBuilder().setName('stop').setDescription('⏹️ Arrêter la musique'),
   async execute(interaction, client) {
-    const player = getKazagumo(client).getPlayer(interaction.guild.id);
-    if (!player) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
-    await player.destroy();
-    await interaction.reply('⏹️ Musique arrêtée ! Yoshi se repose... 💤');
+    const queue = client.musicQueues?.get(interaction.guild.id);
+    if (!queue) return interaction.reply({ content: '❌ Aucune musique !', ephemeral: true });
+    queue.stop();
+    queue.connection.destroy();
+    client.musicQueues.delete(interaction.guild.id);
+    await interaction.reply('⏹️ Arrêté ! Yoshi se repose... 💤');
   },
 };

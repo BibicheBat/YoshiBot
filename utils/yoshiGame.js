@@ -2,8 +2,11 @@
 const { getYoshi, setYoshi, getAllYoshis } = require('../data/db');
 
 const YOSHI_EMOJIS = {
-  danse:        '<a:yoshi_qui_danse:ID_yoshi_qui_danse>',
-  danse2:       '<a:Yoshi_Dance:ID_Yoshi_Dance>',
+  // Emojis animés (à compléter avec tes IDs)
+  danse:        '<a:Yoshi_dance:1517583470799355976>',
+  danse2:       '<a:yoshi_qui_danse:1505495035959836754>',
+
+  // Emojis Yoshi par couleur (IDs réels)
   bleu:         '<:Blue_Yoshi:1517819395802402916>',
   'bleu clair': '<:Light_Blue_Yoshi:1517820817914855424>',
   gris:         '<:Gray_Yoshi:1517820607394480249>',
@@ -13,6 +16,8 @@ const YOSHI_EMOJIS = {
   rouge:        '<:Red_Yoshi:1517818713867423914>',
   violet:       '<:Purple_Yoshi:1517819908056940544>',
   orange:       '<:Orange_Yoshi:1517819505210818560>',
+
+  // Rose : pas d'emoji custom, fallback Unicode
   rose:         '<:Pink_Yoshi:1517818864208056391>',
 };
 

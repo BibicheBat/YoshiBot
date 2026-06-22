@@ -1,13 +1,11 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getKazagumo } = require('../../utils/musicManager');
-
 module.exports = {
-  data: new SlashCommandBuilder().setName('skip').setDescription('⏭️ Passer à la musique suivante'),
+  data: new SlashCommandBuilder().setName('skip').setDescription('⏭️ Passer à la suivante'),
   async execute(interaction, client) {
-    const player = getKazagumo(client).getPlayer(interaction.guild.id);
-    if (!player) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
-    const title = player.queue.current?.title || 'Musique';
-    await player.skip();
+    const queue = client.musicQueues?.get(interaction.guild.id);
+    if (!queue?.playing) return interaction.reply({ content: '❌ Aucune musique !', ephemeral: true });
+    const title = queue.nowPlaying()?.title || 'Musique';
+    queue.skip();
     await interaction.reply(`⏭️ **${title}** passée !`);
   },
 };

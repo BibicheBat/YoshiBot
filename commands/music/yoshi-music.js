@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getKazagumo } = require('../../utils/musicManager');
+const { getOrCreateQueue, searchYoutube, YTDLP } = require('../../utils/musicManager');
 
 const YOSHI_PLAYLIST = [
   { title: "Yoshi's Story - Theme",       url: 'https://www.youtube.com/watch?v=nghTrcPBp3s', emoji: '🏝️' },
@@ -10,40 +10,24 @@ const YOSHI_PLAYLIST = [
   // Ajoute tes musiques ici :
   // { title: 'Nom', url: 'https://youtube.com/watch?v=...', emoji: '🎵' },
 ];
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('yoshi-music')
-    .setDescription('🦕 Lancer une musique Yoshi !')
-    .addStringOption(opt => {
-      opt.setName('musique').setDescription('Choisir une musique').setRequired(false);
-      YOSHI_PLAYLIST.forEach((t, i) => opt.addChoices({ name: `${t.emoji} ${t.title}`, value: `${i}` }));
-      return opt;
-    }),
 
+module.exports = {
+  data: new SlashCommandBuilder().setName('yoshi-music').setDescription('🦕 Playlist Yoshi !')
+    .addStringOption(opt => { opt.setName('musique').setDescription('Choisir').setRequired(false); YOSHI_PLAYLIST.forEach((t, i) => opt.addChoices({ name: `${t.emoji} ${t.title}`, value: `${i}` })); return opt; }),
   async execute(interaction, client) {
     if (!interaction.member.voice.channel) return interaction.reply({ content: '❌ Tu dois être dans un salon vocal !', ephemeral: true });
+    if (!YTDLP) return interaction.reply({ content: '❌ yt-dlp non installé.', ephemeral: true });
     const choice = interaction.options.getString('musique');
-    const track = choice !== null ? YOSHI_PLAYLIST[parseInt(choice)] : YOSHI_PLAYLIST[Math.floor(Math.random() * YOSHI_PLAYLIST.length)];
-    if (!track) return interaction.reply({ content: '❌ Musique introuvable.', ephemeral: true });
-
+    const t = choice !== null ? YOSHI_PLAYLIST[parseInt(choice)] : YOSHI_PLAYLIST[Math.floor(Math.random() * YOSHI_PLAYLIST.length)];
+    if (!t) return interaction.reply({ content: '❌ Musique introuvable.', ephemeral: true });
     await interaction.deferReply();
     try {
-      const kazagumo = getKazagumo(client);
-      let player = kazagumo.getPlayer(interaction.guild.id);
-      if (!player) {
-        player = await kazagumo.createPlayer({
-          guildId: interaction.guild.id,
-          voiceId: interaction.member.voice.channel.id,
-          textId: interaction.channel.id,
-          deaf: true,
-        });
-        player.textChannel = interaction.channel;
-      }
-      const result = await kazagumo.search(track.url, { requester: interaction.user });
-      if (!result?.tracks.length) return interaction.editReply('❌ Musique introuvable !');
-      player.queue.add(result.tracks[0]);
-      if (!player.playing && !player.paused) await player.play();
-      await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('🦕 Yoshi Music').setColor(0x4CAF50).setDescription(`${track.emoji} **${track.title}**\n\nYoshi danse pour toi ! 💃`).setFooter({ text: `Playlist Yoshi • ${YOSHI_PLAYLIST.length} musiques` })] });
+      const info = await searchYoutube(t.url);
+      info.requestedBy = interaction.user.tag;
+      const queue = await getOrCreateQueue(interaction, client);
+      if (!queue) return interaction.editReply('❌ Impossible de rejoindre le vocal !');
+      await queue.addTrack(info);
+      await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('🦕 Yoshi Music').setColor(0x4CAF50).setDescription(`${t.emoji} **${t.title}**\n\nYoshi danse ! 💃`).setFooter({ text: `Playlist Yoshi • ${YOSHI_PLAYLIST.length} musiques` })] });
     } catch (err) {
       await interaction.editReply(`❌ Erreur : \`${err.message}\``);
     }

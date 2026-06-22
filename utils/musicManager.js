@@ -1,65 +1,194 @@
-// utils/musicManager.js - Lavalink via Kazagumo
-const { Kazagumo, Plugins } = require('kazagumo');
-const { Shoukaku } = require('shoukaku');
+// utils/musicManager.js - yt-dlp + FFmpeg (méthode YoutubeBot)
+const { createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, joinVoiceChannel, StreamType } = require('@discordjs/voice');
+const { spawn, execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
-// Serveurs Lavalink publics gratuits
-const LAVALINK_NODES = [
-  {
-    name: 'node1',
-    url: 'lavalink.devamop.in:443',
-    auth: 'DevamOP',
-    secure: true,
-  },
-  {
-    name: 'node2', 
-    url: 'lavalink.clxud.dev:443',
-    auth: 'youshallnotpass',
-    secure: true,
-  },
-  {
-    name: 'node3',
-    url: 'lavalink.lexnet.cc:443',
-    auth: 'lexn3tl@val!nk',
-    secure: true,
-  },
-];
-
-let kazagumo;
-
-function getKazagumo(client) {
-  if (kazagumo) return kazagumo;
-
-  kazagumo = new Kazagumo(
-    {
-      defaultSearchEngine: 'youtube',
-      plugins: [],
-    },
-    new Shoukaku(client, LAVALINK_NODES, {
-      moveOnDisconnect: false,
-      resumable: false,
-      resumableTimeout: 30,
-      reconnectTries: 2,
-      restTimeout: 10000,
-    }),
-    LAVALINK_NODES,
-  );
-
-  kazagumo.shoukaku.on('ready', (name) => console.log(`[Lavalink] Node "${name}" connecté`));
-  kazagumo.shoukaku.on('error', (name, err) => console.error(`[Lavalink] Node "${name}" erreur:`, err.message));
-  kazagumo.shoukaku.on('disconnect', (name) => console.warn(`[Lavalink] Node "${name}" déconnecté`));
-
-  kazagumo.on('playerEnd', (player) => {
-    player.textChannel?.send('🎵 File d\'attente terminée ! Yoshi part se reposer... 💤');
-    player.destroy();
-  });
-
-  kazagumo.on('playerException', (player, track, err) => {
-    console.error('[Lavalink] Erreur lecture:', err.message);
-    player.textChannel?.send(`❌ Erreur de lecture : \`${err.message}\``);
-  });
-
-  console.log('[Music] Kazagumo/Lavalink initialisé');
-  return kazagumo;
+// Trouver yt-dlp
+function findYtDlp() {
+  const paths = ['yt-dlp', '/usr/bin/yt-dlp', '/usr/local/bin/yt-dlp', '/nix/var/nix/profiles/default/bin/yt-dlp'];
+  for (const p of paths) {
+    try { execSync(`${p} --version`, { stdio: 'ignore' }); return p; } catch {}
+  }
+  return null;
 }
 
-module.exports = { getKazagumo };
+const YTDLP = findYtDlp();
+console.log('[Music] yt-dlp:', YTDLP || 'INTROUVABLE');
+
+class MusicQueue {
+  constructor(guildId, textChannel, voiceChannel, connection) {
+    this.guildId = guildId;
+    this.textChannel = textChannel;
+    this.voiceChannel = voiceChannel;
+    this.connection = connection;
+    this.player = createAudioPlayer();
+    this.tracks = [];
+    this.playing = false;
+    this.paused = false;
+    this.currentProcess = null;
+
+    this.connection.subscribe(this.player);
+
+    this.player.on(AudioPlayerStatus.Idle, () => {
+      this.tracks.shift();
+      if (this.tracks.length > 0) this.playNext();
+      else {
+        this.playing = false;
+        this.textChannel.send('🎵 File terminée ! Yoshi se repose... 💤');
+        setTimeout(() => { if (!this.playing) try { this.connection.destroy(); } catch {} }, 30000);
+      }
+    });
+
+    this.player.on('error', err => {
+      console.error('[Player] Erreur:', err.message);
+      this.tracks.shift();
+      if (this.tracks.length > 0) this.playNext();
+    });
+  }
+
+  async addTrack(track) {
+    this.tracks.push(track);
+    if (!this.playing) await this.playNext();
+  }
+
+  async playNext() {
+    if (!this.tracks.length || !YTDLP) return;
+    const track = this.tracks[0];
+    try {
+      const stream = await this.streamYtDlp(track.url);
+      const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+      this.player.play(resource);
+      this.playing = true;
+      this.paused = false;
+    } catch (err) {
+      console.error('[Music] Erreur lecture:', err.message);
+      this.textChannel.send(`❌ Impossible de lire **${track.title}** : \`${err.message}\``);
+      this.tracks.shift();
+      if (this.tracks.length > 0) this.playNext();
+    }
+  }
+
+  streamYtDlp(url) {
+    return new Promise((resolve, reject) => {
+      const args = [
+        '--no-playlist',
+        '--format', 'bestaudio',
+        '--source-addresses', '0.0.0.0', // Force IPv4 comme YoutubeBot
+        '-o', '-',
+        '--quiet',
+        '--no-warnings',
+        url,
+      ];
+
+      const proc = spawn(YTDLP, args);
+      this.currentProcess = proc;
+
+      proc.on('error', err => reject(new Error(`yt-dlp: ${err.message}`)));
+
+      let started = false;
+      proc.stdout.once('data', () => {
+        if (!started) { started = true; resolve(proc.stdout); }
+      });
+
+      proc.stderr.on('data', d => {
+        const msg = d.toString().trim();
+        if (msg) console.error('[yt-dlp]', msg);
+      });
+
+      proc.on('close', code => {
+        if (!started) reject(new Error(`yt-dlp exited with code ${code}`));
+      });
+
+      setTimeout(() => {
+        if (!started) { proc.kill(); reject(new Error('yt-dlp timeout')); }
+      }, 30000);
+    });
+  }
+
+  pause()      { if (!this.paused)  { this.player.pause();   this.paused = true;  return true; } return false; }
+  resume()     { if (this.paused)   { this.player.unpause(); this.paused = false; return true; } return false; }
+  skip()       { this.player.stop(); }
+  stop()       { this.tracks = []; this.player.stop(); this.playing = false; }
+  nowPlaying() { return this.tracks[0] || null; }
+  queue()      { return this.tracks; }
+}
+
+// Chercher une vidéo avec yt-dlp
+function searchYoutube(query) {
+  return new Promise((resolve, reject) => {
+    if (!YTDLP) return reject(new Error('yt-dlp introuvable'));
+
+    const isUrl = /^https?:\/\//.test(query);
+    const searchQuery = isUrl ? query : `ytsearch1:${query}`;
+
+    const proc = spawn(YTDLP, [
+      '--no-playlist',
+      '--print', '%(title)s',
+      '--print', '%(webpage_url)s',
+      '--print', '%(duration_string)s',
+      '--print', '%(thumbnail)s',
+      '--source-addresses', '0.0.0.0',
+      '--quiet',
+      '--no-warnings',
+      searchQuery,
+    ]);
+
+    let out = '';
+    proc.stdout.on('data', d => out += d.toString());
+    proc.stderr.on('data', d => console.error('[yt-dlp search]', d.toString().trim()));
+    proc.on('error', err => reject(new Error(`yt-dlp: ${err.message}`)));
+    proc.on('close', () => {
+      const lines = out.trim().split('\n');
+      if (lines.length < 2 || !lines[1]) return reject(new Error('Aucun résultat trouvé'));
+      resolve({
+        title:     lines[0] || 'Titre inconnu',
+        url:       lines[1],
+        duration:  lines[2] || '??:??',
+        thumbnail: lines[3] || null,
+      });
+    });
+
+    setTimeout(() => { proc.kill(); reject(new Error('Recherche timeout')); }, 20000);
+  });
+}
+
+async function getOrCreateQueue(interaction, client) {
+  const voiceChannel = interaction.member.voice.channel;
+  if (!voiceChannel) return null;
+
+  const guildId = interaction.guild.id;
+  if (client.musicQueues.has(guildId)) return client.musicQueues.get(guildId);
+
+  const connection = joinVoiceChannel({
+    channelId: voiceChannel.id,
+    guildId,
+    adapterCreator: interaction.guild.voiceAdapterCreator,
+  });
+
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 30000);
+  } catch {
+    try { connection.destroy(); } catch {}
+    return null;
+  }
+
+  const queue = new MusicQueue(guildId, interaction.channel, voiceChannel, connection);
+  client.musicQueues.set(guildId, queue);
+
+  connection.on(VoiceConnectionStatus.Disconnected, async () => {
+    try {
+      await Promise.race([
+        entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+        entersState(connection, VoiceConnectionStatus.Connecting, 5000),
+      ]);
+    } catch {
+      try { connection.destroy(); } catch {}
+      client.musicQueues.delete(guildId);
+    }
+  });
+
+  return queue;
+}
+
+module.exports = { getOrCreateQueue, searchYoutube, YTDLP };
