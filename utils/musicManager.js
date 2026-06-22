@@ -1,10 +1,8 @@
-// utils/musicManager.js - yt-dlp + FFmpeg (méthode YoutubeBot)
+// utils/musicManager.js - yt-dlp + FFmpeg
 const { createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, joinVoiceChannel, StreamType } = require('@discordjs/voice');
 const { spawn, execSync } = require('child_process');
-const path = require('path');
 const fs = require('fs');
 
-// Trouver yt-dlp
 function findYtDlp() {
   const paths = ['yt-dlp', '/usr/bin/yt-dlp', '/usr/local/bin/yt-dlp', '/nix/var/nix/profiles/default/bin/yt-dlp'];
   for (const p of paths) {
@@ -16,6 +14,17 @@ function findYtDlp() {
 const YTDLP = findYtDlp();
 console.log('[Music] yt-dlp:', YTDLP || 'INTROUVABLE');
 
+// Cookies YouTube depuis variable d'env
+function getCookieArgs() {
+  const cookie = process.env.YOUTUBE_COOKIE;
+  if (!cookie) return [];
+  try {
+    fs.writeFileSync('/tmp/yt-cookies.txt', cookie);
+    console.log('[Music] Cookies YouTube chargés');
+    return ['--cookies', '/tmp/yt-cookies.txt'];
+  } catch { return []; }
+}
+
 class MusicQueue {
   constructor(guildId, textChannel, voiceChannel, connection) {
     this.guildId = guildId;
@@ -26,7 +35,6 @@ class MusicQueue {
     this.tracks = [];
     this.playing = false;
     this.paused = false;
-    this.currentProcess = null;
 
     this.connection.subscribe(this.player);
 
@@ -63,7 +71,7 @@ class MusicQueue {
       this.paused = false;
     } catch (err) {
       console.error('[Music] Erreur lecture:', err.message);
-      this.textChannel.send(`❌ Impossible de lire **${track.title}** : \`${err.message}\``);
+      this.textChannel.send(`Impossible de lire **${track.title}** : \`${err.message}\``);
       this.tracks.shift();
       if (this.tracks.length > 0) this.playNext();
     }
@@ -73,36 +81,24 @@ class MusicQueue {
     return new Promise((resolve, reject) => {
       const args = [
         '--no-playlist',
-        '--format', 'bestaudio',
-        '--source-address', '0.0.0.0', // Force IPv4 comme YoutubeBot
+        '--format', 'bestaudio/best',
+        '--source-address', '0.0.0.0',
         '-o', '-',
         '--quiet',
         '--no-warnings',
+        ...getCookieArgs(),
         url,
       ];
 
       const proc = spawn(YTDLP, args);
-      this.currentProcess = proc;
 
       proc.on('error', err => reject(new Error(`yt-dlp: ${err.message}`)));
 
       let started = false;
-      proc.stdout.once('data', () => {
-        if (!started) { started = true; resolve(proc.stdout); }
-      });
-
-      proc.stderr.on('data', d => {
-        const msg = d.toString().trim();
-        if (msg) console.error('[yt-dlp]', msg);
-      });
-
-      proc.on('close', code => {
-        if (!started) reject(new Error(`yt-dlp exited with code ${code}`));
-      });
-
-      setTimeout(() => {
-        if (!started) { proc.kill(); reject(new Error('yt-dlp timeout')); }
-      }, 30000);
+      proc.stdout.once('data', () => { if (!started) { started = true; resolve(proc.stdout); } });
+      proc.stderr.on('data', d => { const msg = d.toString().trim(); if (msg) console.error('[yt-dlp]', msg); });
+      proc.on('close', code => { if (!started) reject(new Error(`yt-dlp code ${code}`)); });
+      setTimeout(() => { if (!started) { proc.kill(); reject(new Error('yt-dlp timeout')); } }, 30000);
     });
   }
 
@@ -114,7 +110,6 @@ class MusicQueue {
   queue()      { return this.tracks; }
 }
 
-// Chercher une vidéo avec yt-dlp
 function searchYoutube(query) {
   return new Promise((resolve, reject) => {
     if (!YTDLP) return reject(new Error('yt-dlp introuvable'));
@@ -131,6 +126,7 @@ function searchYoutube(query) {
       '--source-address', '0.0.0.0',
       '--quiet',
       '--no-warnings',
+      ...getCookieArgs(),
       searchQuery,
     ]);
 
@@ -141,12 +137,7 @@ function searchYoutube(query) {
     proc.on('close', () => {
       const lines = out.trim().split('\n');
       if (lines.length < 2 || !lines[1]) return reject(new Error('Aucun résultat trouvé'));
-      resolve({
-        title:     lines[0] || 'Titre inconnu',
-        url:       lines[1],
-        duration:  lines[2] || '??:??',
-        thumbnail: lines[3] || null,
-      });
+      resolve({ title: lines[0] || 'Titre inconnu', url: lines[1], duration: lines[2] || '??:??', thumbnail: lines[3] || null });
     });
 
     setTimeout(() => { proc.kill(); reject(new Error('Recherche timeout')); }, 20000);
