@@ -74,7 +74,7 @@ class MusicQueue {
       const args = [
         '--no-playlist',
         '--format', 'bestaudio',
-        '--source-addresses', '0.0.0.0', // Force IPv4 comme YoutubeBot
+        '--source-address', '0.0.0.0', // Force IPv4 comme YoutubeBot
         '-o', '-',
         '--quiet',
         '--no-warnings',
@@ -128,7 +128,7 @@ function searchYoutube(query) {
       '--print', '%(webpage_url)s',
       '--print', '%(duration_string)s',
       '--print', '%(thumbnail)s',
-      '--source-addresses', '0.0.0.0',
+      '--source-address', '0.0.0.0',
       '--quiet',
       '--no-warnings',
       searchQuery,
