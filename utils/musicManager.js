@@ -81,7 +81,7 @@ class MusicQueue {
     return new Promise((resolve, reject) => {
       const args = [
         '--no-playlist',
-        'bestaudio/best',
+        '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
         '--source-address', '0.0.0.0',
         '-o', '-',
         '--quiet',
