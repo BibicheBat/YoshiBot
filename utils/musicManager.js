@@ -83,6 +83,8 @@ class MusicQueue {
         '--no-playlist',
         '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
         '--source-address', '0.0.0.0',
+        '--extractor-args', 'youtube:player_client=web,mweb',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
         '-o', '-',
         '--quiet',
         '--no-warnings',
@@ -119,11 +121,14 @@ function searchYoutube(query) {
 
     const proc = spawn(YTDLP, [
       '--no-playlist',
+      '--skip-download',
       '--print', '%(title)s',
       '--print', '%(webpage_url)s',
       '--print', '%(duration_string)s',
       '--print', '%(thumbnail)s',
       '--source-address', '0.0.0.0',
+      '--extractor-args', 'youtube:player_client=web,mweb',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
       '--quiet',
       '--no-warnings',
       ...getCookieArgs(),
